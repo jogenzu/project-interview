@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>test math.floor</title>
+  <!-- Bootstrap CSS -->
+  <link href="css/bootstrap.min.css" rel="stylesheet">
+  <!-- Vue.js -->
+  <script src="js/vue.global.prod.js"></script>
+  <!-- SweetAlert2 -->
+  <script src="js/sweetalert2.js"></script>
+  <style>
+    body { padding: 20px; }
+    .tab-content { margin-top: 20px; }
+    .table th, .table td { vertical-align: middle; }
+    .form-label { font-weight: bold; }
+  </style>
+</head>
+<body>
+    <div id="app" class="container">
+        <h1>test math.floor</h1>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        createApp({
+            data() {
+                return {
+                    interviews: [],
+                }
+            },
+            methods: {
+                this.interviews = [],
+            }
+            mounted() {
+                this.interviews = [
+                    { start_time: '2025-05-23 10:00:00' },
+                ];
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面试系统管理</title>
+  <!-- Bootstrap CSS -->
+  <link href="css/bootstrap.min.css" rel="stylesheet">
+  <!-- Vue.js -->
+  <script src="js/vue.global.prod.js"></script>
+  <!-- SweetAlert2 -->
+  <script src="js/sweetalert2.js"></script>
+  <style>
+    body { padding: 20px; }
+    .tab-content { margin-top: 20px; }
+    .table th, .table td { vertical-align: middle; }
+    .form-label { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <h1 class="mb-4">面试系统管理</h1>
+
+    <!-- BaseURL配置 -->
+    <div class="mb-3 alert alert-secondary">
+      <div class="row align-items-center">
+        <div class="col-auto">
+          <label class="mb-0">API 基础URL:</label>
+        </div>
+        <div class="col">
+          <input type="text" class="form-control" v-model="baseURL" placeholder="例如: https://api.example.com/">
+        </div>
+        <div class="col-auto">
+          <button class="btn btn-primary" @click="applyBaseURL">应用</button>
+        </div>
+      </div>
+      <div class="mt-2 small">
+        <span>当前API基础路径: {{ baseURL || '(使用相对路径)' }}</span>
+      </div>
+    </div>
+
+    <!-- 导航选项卡 -->
+    <ul class="nav nav-tabs">
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'positions' }" @click="activeTab = 'positions'">岗位管理</a> <!--对应第56行判断-->
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'candidates' }" @click="activeTab = 'candidates'">候选人管理</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" :class="{ active: activeTab === 'interviews' }" @click="activeTab = 'interviews'">面试管理</a>
+      </li>
+    </ul>
+
+    <!-- 岗位管理 -->
+    <div v-if="activeTab === 'positions'" class="tab-content">
+      <h3 class="mt-3">待招聘岗位</h3>
+      <button class="btn btn-primary mb-3" @click="showPositionForm(null)">添加岗位</button>  <!--这是页卡tab按钮，切换点击的-->
+                                                                <!--showPositionForm方法里面有把this.showPositionModal = true, 即弹窗-->
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>名称</th>
+            <th>状态</th>
+            <th>需求数量</th>
+            <th>创建时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="position in positions" :key="position.id">
+            <td>{{ position.id }}</td>
+            <td>{{ position.name }}</td>
+            <td>{{ positionStatusMap[position.status] }}</td>
+            <td>{{ position.quantity }}</td>
+            <td>{{ formatTimestamp(position.created_at) }}</td>
+            <td>
+              <button class="btn btn-sm btn-warning me-2" @click="showPositionForm(position)">编辑</button>  <!--记住，position是列表positions里的一个字典-->
+              <button class="btn btn-sm btn-danger" @click="deletePosition(position.id)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 岗位表单模态框：即，点添加或编辑时弹出来的框-->
+      <div v-if="showPositionModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ editingPosition ? '编辑岗位' : '添加岗位' }}</h5> <!--没毛病，看懂了-->
+              <button type="button" class="btn-close" @click="showPositionModal = false"></button> <!--class="btn-close" 表示小叉关闭按钮-->
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">岗位名称</label>
+                <input v-model="positionForm.name" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">岗位要求</label>
+                <textarea v-model="positionForm.requirements" class="form-control" rows="4"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">岗位职责</label>
+                <textarea v-model="positionForm.responsibilities" class="form-control" rows="4"></textarea>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">需求数量</label>
+                <input v-model.number="positionForm.quantity" type="number" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">状态</label>
+                <select v-model.number="positionForm.status" class="form-control">
+                  <option value="0">未启动</option>
+                  <option value="1">进行中</option>
+                  <option value="2">已完成</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">招聘负责人</label>
+                <input v-model="positionForm.recruiter" class="form-control">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" @click="showPositionModal = false">取消</button>  <!--false表示不显示弹框-->
+              <button class="btn btn-primary" @click="savePosition">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 候选人管理 -->
+    <div v-if="activeTab === 'candidates'" class="tab-content">
+      <h3 class="mt-3">候选人</h3>
+      <button class="btn btn-primary mb-3" @click="showCandidateForm(null)">添加候选人</button>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>姓名</th>
+            <th>申请岗位</th>
+            <th>联系Email</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="candidate in candidates" :key="candidate.id">
+            <td>{{ candidate.id }}</td>
+            <td>{{ candidate.name }}</td>
+            <td>{{ getPositionName(candidate.position_id) }}</td>  <!--根据候选人应聘的position_id到postition职位信息里找到对应的职位名称-->
+            <td>{{ candidate.email }}</td>
+            <td>
+              <button class="btn btn-sm btn-info me-2" @click="downloadResume(candidate.id)">下载简历</button>
+              <button class="btn btn-sm btn-danger" @click="deleteCandidate(candidate.id)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 候选人表单模态框,就是添加候选人的弹窗 -->
+      <div v-if="showCandidateModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">添加候选人</h5>
+              <button type="button" class="btn-close" @click="showCandidateModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">姓名</label>
+                <input v-model="candidateForm.name" class="form-control" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">申请岗位</label>
+                <select v-model.number="candidateForm.position_id" class="form-control">
+                  <option v-for="position in positions" :value="position.id" :key="position.id">  <!--用的v-for循环获取职位名称-->
+                    {{ position.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">联系Email</label>
+                <input v-model="candidateForm.email" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">简历文件</label>
+                <input type="file" class="form-control" @change="handleResumeUpload" accept=".pdf">
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" @click="showCandidateModal = false">取消</button>
+              <button class="btn btn-primary" @click="saveCandidate">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 面试管理 -->
+    <div v-if="activeTab === 'interviews'" class="tab-content">
+      <h3 class="mt-3">面试</h3>
+      <button class="btn btn-primary mb-3" @click="showInterviewForm(null)">添加面试</button> <!--点击后会把interviewForm里的数据清空，然后填入后，就又有数据了，然后点击保存，就提交了。这即是体现了v-mode的双向数据流动-->
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>候选人</th>
+            <th>面试官</th>
+            <th>开始时间</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="interview in interviews" :key="interview.id">
+            <td>{{ interview.id }}</td>
+            <td>{{ getCandidateName(interview.candidate_id) }}</td>  <!--根据面试表里的候选人id到候选人表里面查找候选人名字-->
+            <td>{{ interview.interviewer }}</td>
+            <td>{{ formatTimestamp(interview.start_time) }}</td>
+            <td>{{ interviewStatusMap[interview.status] }}</td>
+            <td>
+            
+              <button class="btn btn-sm btn-warning me-3" @click="showInterviewForm(interview)">编辑</button>
+
+              <button class="btn btn-sm btn-danger me-3" @click="deleteInterview(interview.id)">删除</button>
+
+              <button class="btn btn-sm btn-info me-3" @click="copyInterviewLink(interview.token)">复制面试链接</button>
+
+              <button class="btn btn-sm btn-success" @click="downloadReport(interview.id)">下载面试报告</button>
+
+           
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 面试表单模态框：即添加面试或者编辑面试的弹窗 -->
+      <div v-if="showInterviewModal" class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">{{ editingInterview ? '编辑面试' : '添加面试' }}</h5>
+              <button type="button" class="btn-close" @click="showInterviewModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">候选人</label>
+                <select v-model.number="interviewForm.candidate_id" class="form-control">
+                  <option v-for="candidate in candidates" :value="candidate.id" :key="candidate.id">
+                    {{ candidate.name }}
+                  </option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">面试官</label>
+                <input v-model="interviewForm.interviewer" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">开始时间</label>
+                <input v-model="interviewForm.start_time" type="datetime-local" class="form-control">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">状态</label>
+                <select v-model.number="interviewForm.status" class="form-control">
+                  <option value="0">未开始</option>
+                  <option value="1">试题已备好</option>
+                  <option value="2">面试进行中</option>
+                  <option value="3">面试完毕</option>
+                  <option value="4">面试报告已生成</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">是否通过</label>
+                <select v-model.number="interviewForm.is_passed" class="form-control">
+                  <option value="0">否</option>
+                  <option value="1">是</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" @click="showInterviewModal = false">取消</button>
+              <button class="btn btn-primary" @click="saveInterview">保存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          baseURL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')  //获取浏览器地址里的域名，老师肯定是如果是用docker运行的就用resume.aieg.top访问
+            ? 'http://localhost:8000/'   // dev
+            : 'https://resume.aieg.top/', // prd
+          activeTab: 'positions',
+          positions: [],
+          candidates: [],
+          interviews: [],
+          showPositionModal: false,
+          showCandidateModal: false,
+          showInterviewModal: false,
+          editingPosition: null,
+          editingInterview: null,
+          positionForm: {
+            id: null,
+            name: '',
+            requirements: '',
+            responsibilities: '',
+            quantity: 1,
+            status: 0,
+            recruiter: ''
+          },
+          candidateForm: {
+            position_id: null,
+            name: '',
+            email: '',
+            resume_content: null
+          },
+          interviewForm: {
+            id: null,
+            candidate_id: null,
+            interviewer: '',
+            start_time: '',
+            status: 0,
+            is_passed: 0
+          },
+          positionStatusMap: { 0: '未启动', 1: '进行中', 2: '已完成' },
+          interviewStatusMap: { 0: '未开始', 1: '试题已备好', 2: '面试进行中', 3: '面试完毕', 4: '面试报告已生成' }
+        };
+      },
+      mounted() {
+        // 从URL参数中获取baseURL（如果有）
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('baseURL')) {
+          this.baseURL = urlParams.get('baseURL');
+          // 确保baseURL以/结尾
+          if (this.baseURL && !this.baseURL.endsWith('/')) {
+            this.baseURL += '/';
+          }
+        }
+        
+        this.fetchPositions();
+        this.fetchCandidates();
+        this.fetchInterviews();
+      },
+      methods: {
+        // 获取API完整URL
+        getApiUrl(path) {
+          // 如果path已经以/开头，去掉开头的/，因为baseURL后面带有/
+          if (path.startsWith('/')) {
+            path = path.substring(1);  //从第2个字符往后截取，第1个字符的索引是0
+          }
+          return `${this.baseURL}${path}`;  // http://localhost:8000/api/positions/xxid
+        },
+        // 获取岗位列表
+        async fetchPositions() {
+          try {
+            const response = await fetch(this.getApiUrl('api/positions'));// 'api/positions' 应该是自己定义的接口，在server.py中定义
+            this.positions = await response.json();
+            console.log("-----this.positions:------",this.positions);
+          } catch (error) {
+            console.error('获取岗位失败:', error);
+            // 模拟数据
+            this.positions = [
+              { id: 1, name: 'Web前端开发工程师（模拟）', status: 0, quantity: 2, created_at: Math.floor(Date.now() / 1000), recruiter: '张三' }
+            ];   // ---这里只是获取到了，存在了this.positions中，但还没有显示出来，需要显示出来，需要使用v-for指令
+          }
+        },
+        // 获取候选人列表
+        async fetchCandidates() {
+          try {
+            const response = await fetch(this.getApiUrl('api/candidates'));
+            this.candidates = await response.json();
+          } catch (error) {
+            console.error('获取候选人失败:', error);
+            // 模拟数据
+            this.candidates = [
+              { id: 1, position_id: 1, name: '李四', contact: '12345678901' }
+            ];
+          }
+        },
+          // 删除候选人
+        async deleteCandidate(id) {
+          if (!confirm('确认删除此候选人？')) return;
+          try {
+            await fetch(this.getApiUrl(`api/candidates/${id}`), { method: 'DELETE' });
+            this.fetchCandidates();
+          } catch (error) {
+            console.error('删除候选人失败:', error);
+          }
+        },
+        // 获取面试列表
+        async fetchInterviews() {
+          try {
+            const response = await fetch(this.getApiUrl('api/interviews'));
+            this.interviews = await response.json();
+            console.log("----this.interviews：----",this.interviews);
+
+            //如下三行是我加的：为了搞清楚时间字段的全流程：
+            this.interviews.forEach(element => {
+              console.log("---star_time:---",element.start_time);
+            });
+          } catch (error) {
+            console.error('获取面试失败:', error);
+            // 模拟数据
+            this.interviews = [
+              { id: 1, candidate_id: 1, interviewer: '王五', start_time: Math.floor(Date.now() / 1000), status: 0, is_passed: 0 }
+            ]; //注意这里的列表里只添加了一个字典元素，用于默认显示的模拟数据。所以上面的for interview in interviews 里，可以用interview.start_time 来获取到start_time的值
+          }
+        },
+        // 显示岗位表单
+        showPositionForm(position) {
+          this.editingPosition = position;  //点击添加职位按钮时，这个值是空字典，点击编辑xx按钮时，这个值是有值的
+          this.positionForm = position
+            ? { ...position } //这里的省略号是ES6的语法，表示将position字典里的所有键值对都复制到positionForm字典里
+            : { id: null, name: '', requirements: '', responsibilities: '', quantity: 1, status: 0, recruiter: '' };
+          this.showPositionModal = true;
+        },
+        // 保存岗位
+        async savePosition() {
+          //如果前面点的是编辑，就按照传过来的id进行保存，如果前面点的是新增，则不需要传递id，直接保存插入db
+          const url = this.editingPosition ? this.getApiUrl(`api/positions/${this.positionForm.id}`) : this.getApiUrl('api/positions');
+          const method = this.editingPosition ? 'PUT' : 'POST';
+          try {
+            await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.positionForm)   //转换为json字符串，相当于python里的json.dumps()函数
+            });  //当method=POST的时候，就执行了插入db
+            this.showPositionModal = false; //没错，点了报错之后，就不需要弹框了
+            this.fetchPositions();  // 新增一条数据后，再调用fetchPositions方法从db里面把所有的职位信息获取出来，页面就遍历出来了，vue动态更新！
+          } catch (error) {
+            console.error('保存岗位失败:', error);
+          }
+        },
+        // 删除岗位
+        async deletePosition(id) {
+          if (!confirm('确认删除此岗位？')) return;
+          try {
+            await fetch(this.getApiUrl(`api/positions/${id}`), { method: 'DELETE' });
+            this.fetchPositions();
+          } catch (error) {
+            console.error('删除岗位失败:', error);
+          }
+        },
+        // 显示候选人表单
+        showCandidateForm() {
+          this.candidateForm = { position_id: null, name: '', email: '', resume_content: null };
+          this.showCandidateModal = true;
+        },
+        // 处理简历上传
+        handleResumeUpload(event) {
+          const file = event.target.files[0];
+          if (file) {
+            // Check if file is a PDF
+            if (file.type !== 'application/pdf') {
+              alert('请上传PDF格式的文件');
+              event.target.value = ''; // Clear the input
+              return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              this.candidateForm.resume_content = e.target.result;
+            };
+            reader.readAsArrayBuffer(file);
+          }
+        },
+        // 保存候选人
+        async saveCandidate() {
+          const formData = new FormData();
+          formData.append('position_id', this.candidateForm.position_id);
+          formData.append('name', this.candidateForm.name);
+          formData.append('email', this.candidateForm.email);
+          if (this.candidateForm.resume_content) {
+            formData.append('resume_content', new Blob([this.candidateForm.resume_content]));
+          }
+          try {
+            await fetch(this.getApiUrl('api/candidates'), {
+              method: 'POST',
+              body: formData
+            });
+            this.showCandidateModal = false;
+            this.fetchCandidates(); //保存完毕之后，模态弹框消失，然后回到原来的页面，需要刷新候选人列表（从db里获取所有候选人信息）
+          } catch (error) {
+            console.error('保存候选人失败:', error);
+          }
+        },
+        // 下载简历
+        async downloadResume(candidateId) {
+          try {
+            const response = await fetch(this.getApiUrl(`api/candidates/${candidateId}/resume`));
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `resume_${candidateId}.pdf`;
+            a.click();
+            window.URL.revokeObjectURL(url);  //释放临时URL，避免内存泄漏。
+          } catch (error) {
+            console.error('下载简历失败:', error);
+          }
+        },
+        // 显示面试表单
+        showInterviewForm(interview) {
+          this.editingInterview = interview;
+          this.interviewForm = interview    // 哦哦，原来在这里把interview赋给interviewForm的！从后台变量里面付给前台的interviewForm里
+            ? {...interview,start_time: new Date(interview.start_time * 1000 + 8 * 3600 * 1000).toISOString().slice(0, 16)}
+      //JavaScript的Date构造函数需要毫秒级时间戳。将Date对象转换为ISO 8601标准格式的字符串格式为： YYYY-MM-DDTHH:mm:ss.sssZ。然后从ISO字符串中提取前16个字符
+            : { id: null, candidate_id: null, interviewer: '', start_time: '', status: 0, is_passed: 0 };  //点击的添加面试才走这一句，都是空的，等待输入
+          this.showInterviewModal = true;
+          console.log("---start_time:----",this.interviewForm.start_time)
+        },
+        // 复制面试链接
+        copyInterviewLink(token) {
+
+          const link = `${this.baseURL}interview.html?token=${token}`;
+          navigator.clipboard.writeText(link); //JavaScript 中用于 将文本写入系统剪贴板 的现代 API
+          //给出友好提示，不用点击确认的
+          //alert('链接已复制到剪贴板');
+          Swal.fire({    //swal是sweealert的简写，对应顶部引入的sweetalert2.js
+            title: '链接已复制到剪贴板',
+            icon: 'success'
+          });
+
+        },
+        // 保存面试
+        async saveInterview() {
+          const form = { ...this.interviewForm };
+          form.start_time = Math.floor(new Date(form.start_time).getTime() / 1000);  //db里面确实是填的秒数
+          // 这里的form.start_time 是表单上填的时间组件里的时间，
+          const url = this.editingInterview ? this.getApiUrl(`api/interviews/${form.id}`) : this.getApiUrl('api/interviews');
+          const method = this.editingInterview ? 'PUT' : 'POST';
+          try {
+            await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(form)
+            });
+            this.showInterviewModal = false;
+            this.fetchInterviews();
+          } catch (error) {
+            console.error('保存面试失败:', error);
+          }
+        },
+        // 获取岗位名称
+        getPositionName(positionId) {
+          const position = this.positions.find(p => p.id === positionId);  // docs笔记里记录了解释，find是JavaScript里面数组的一个函数
+          return position ? position.name : '未知';
+        },
+        // 获取候选人姓名
+        getCandidateName(candidateId) {
+          const candidate = this.candidates.find(c => c.id === candidateId); //<!--根据面试表里的候选人id到候选人表里面查找候选人名字-->
+          return candidate ? candidate.name : '未知';
+        },
+        // 格式化时间戳
+        formatTimestamp(timestamp) {
+          if (!timestamp) return '';
+          return new Date(timestamp * 1000).toLocaleString();  //这里默认输出的时间是带秒的
+        },
+        // 应用BaseURL
+        applyBaseURL() {
+          // 更新URL参数
+          const url = new URL(window.location.href);
+          if (this.baseURL) {
+            url.searchParams.set('baseURL', this.baseURL);
+          } else {
+            url.searchParams.delete('baseURL');
+          }
+          window.history.pushState({}, '', url);
+          
+          // 重新获取数据
+          this.fetchPositions();
+          this.fetchCandidates();
+          this.fetchInterviews();
+        },
+        // 删除面试
+        async deleteInterview(id) {
+          if (!confirm('确认删除此面试？')) return;
+          try {
+            await fetch(this.getApiUrl(`api/interviews/${id}`), { method: 'DELETE' });
+            this.fetchInterviews();
+          } catch (error) {
+            console.error('删除面试失败:', error);
+          }
+        },
+        // 下载面试报告 (跟下载简历类似的逻辑)
+        async downloadReport(interviewId) {
+          try {
+            const response = await fetch(this.getApiUrl(`api/interviews/${interviewId}/report`));
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `interview_report_${interviewId}.pdf`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+          } catch (error) {
+            console.error('下载面试报告失败:', error);
+            Swal.fire({
+              title: '下载失败',
+              text: '面试报告尚未生成或下载过程中出现错误',
+              icon: 'error'
+            });
+          }
+        }
+      }
+    }).mount('#app');
+  </script>
+  <!-- Bootstrap JS -->
+  <script src="js/bootstrap.bundle.min.js"></script>
+  <footer style="text-align: center; padding: 20px; background: #f5f5f5;" >
+    <a href="https://beian.miit.gov.cn" target="_blank" style="color: #666; text-decoration: none;">粤ICP备2026007468号-1</a>
+  </footer>
+</body>
+</html>

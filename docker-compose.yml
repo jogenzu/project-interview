@@ -1,0 +1,45 @@
+services:
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    #mem_limit: 720m
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./app:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - shared-network
+
+  question_worker:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    #mem_limit: 80m
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./app:/app
+    command: python generate_interview_questions.py
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - app
+
+  report_worker:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    #mem_limit: 80m
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./app:/app
+    command: python generate_interview_reports.py
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - app
+
+networks:
+  shared-network:
+    external: true
